@@ -107,6 +107,7 @@ library
         plutus-ledger-api -any,
         plutus-ledger-constraints -any,
         plutus-tx -any,
+        plutus-tx-plugin -any,
         freer-extras -any
     build-depends:
         cardano-api -any,
@@ -151,13 +152,10 @@ library
         text-class -any,
         uniplate -any
 
-    if !(impl(ghcjs) || os(ghcjs))
-        build-depends: plutus-tx-plugin -any
-
     if flag(defer-plugin-errors)
         ghc-options: -fplugin-opt PlutusTx.Plugin:defer-errors
 
-    if !(impl(ghcjs) || os(ghcjs) || os(windows))
+    if !os(windows)
         exposed-modules:
             Plutus.Contract.Test
             Plutus.Contract.Test.Coverage
@@ -214,6 +212,7 @@ test-suite plutus-contract-test
         plutus-ledger-api -any,
         plutus-ledger-constraints -any,
         plutus-tx -any,
+        plutus-tx-plugin -any,
         QuickCheck -any,
         row-types -any,
         semigroupoids -any,
@@ -224,6 +223,3 @@ test-suite plutus-contract-test
         tasty-quickcheck -any,
         text -any,
         transformers -any
-
-    if !(impl(ghcjs) || os(ghcjs))
-        build-depends: plutus-tx-plugin -any

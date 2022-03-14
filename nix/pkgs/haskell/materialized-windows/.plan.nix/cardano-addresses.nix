@@ -11,7 +11,7 @@
     flags = { release = false; };
     package = {
       specVersion = "1.12";
-      identifier = { name = "cardano-addresses"; version = "3.7.0"; };
+      identifier = { name = "cardano-addresses"; version = "3.6.0"; };
       license = "Apache-2.0";
       copyright = "2021 IOHK";
       maintainer = "operations@iohk.io";
@@ -132,5 +132,5 @@
       rev = "minimal";
       sha256 = "";
       };
-    postUnpack = "sourceRoot+=/core; echo source root reset to \$sourceRoot";
+    postUnpack = "sourceRoot+=/core; echo source root reset to $sourceRoot";
     }) // { cabal-generator = "hpack"; }

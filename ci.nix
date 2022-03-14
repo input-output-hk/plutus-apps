@@ -13,10 +13,10 @@ let
   inherit (import (sources.plutus-core + "/nix/lib/ci.nix")) dimension platformFilterGeneric filterAttrsOnlyRecursive filterSystems;
   # limit supportedSystems to what the CI can actually build
   # currently that is linux and darwin.
-  systems = filterSystems supportedSystems;
+  systems = builtins.listToAttrs (builtins.map (name: { inherit name; value = name; }) supportedSystems);
   crossSystems =
     let pkgs = (import ./default.nix { }).pkgs;
-    in { inherit (pkgs.lib.systems.examples) mingwW64; };
+    in { inherit (pkgs.lib.systems.examples) ghcjs; }; # mingwW64; }; # we can't support windows right now, as cross compilation of plugins doesn't work.
 
   # Collects haskell derivations and builds an attrset:
   #
@@ -64,6 +64,7 @@ let
           platformString =
             if crossSystem == null then system
             else if crossSystem.config == "x86_64-w64-mingw32" then "x86_64-windows"
+            else if crossSystem.config == "js-unknown-ghcjs" then "js-ghcjs"
             else crossSystem.config;
           isBuildable = platformFilterGeneric pkgs platformString;
           filterCross = x:
@@ -105,9 +106,9 @@ let
           # FIXME: this should simply be set on the main shell derivation, but this breaks
           # lorri: https://github.com/target/lorri/issues/489. In the mean time, we set it
           # only on the CI version, so that we still catch it, but lorri doesn't see it.
-          shell = (import ./shell.nix { inherit packages; }).overrideAttrs (attrs: attrs // {
-            disallowedRequisites = [ plutus-apps.haskell.packages.plutus-ledger.components.library ];
-          });
+          # shell = (import ./shell.nix { inherit packages; }).overrideAttrs (attrs: attrs // {
+          #   disallowedRequisites = [ plutus-apps.haskell.packages.plutus-ledger.components.library ];
+          # });
 
           # build all haskell packages and tests
           haskell = pkgs.recurseIntoAttrs (mkHaskellDimension pkgs plutus-apps.haskell.projectPackages);

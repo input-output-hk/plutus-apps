@@ -11,8 +11,9 @@ synopsis: Wallet API
 description:
     Plutus ledger library
 category: Language
-build-type: Simple
 extra-doc-files: README.md
+
+build-type: Simple
 
 source-repository head
     type: git

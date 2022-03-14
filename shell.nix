@@ -27,6 +27,10 @@ let
     })
     { };
 
+  crossSystems =
+    with (import ./default.nix { }).pkgs.lib.systems.examples; [ ghcjs ];
+  crossPackages = builtins.map (crossSystem: import ./. { inherit system crossSystem; }) crossSystems;
+
   # For Sphinx, and ad-hoc usage
   sphinxTools = python3.withPackages (ps: [
     sphinxcontrib-haddock.sphinxcontrib-domaintools
@@ -55,7 +59,13 @@ let
         files = "\\.purs$";
         language = "system";
       };
-      stylish-haskell.enable = true;
+      stylish-haskell = {
+        enable = true;
+        excludes = [
+          "stubs/cardano-api-stub/.*"
+          "stubs/iohk-monitoring-stub/.*"
+        ];
+      };
       nixpkgs-fmt = {
         enable = true;
         # While nixpkgs-fmt does exclude patterns specified in `.ignore` this
@@ -63,7 +73,10 @@ let
         # maintain excludes here *and* in `./.ignore` and *keep them in sync*.
         excludes = [ ".*nix/pkgs/haskell/materialized.*/.*" ".*/spago-packages.nix$" ];
       };
-      shellcheck.enable = true;
+      shellcheck = {
+        enable = true;
+        excludes = [ "nix/overlays/gnu-config/config.guess" ];
+      };
       png-optimization = {
         enable = true;
         name = "png-optimization";
@@ -127,9 +140,13 @@ let
     updateClientDeps
   ]);
 
+  crossShells = builtins.map (p: p.plutus-apps.haskell.project.shellFor { }) crossPackages;
+
 in
 haskell.project.shellFor {
   nativeBuildInputs = nixpkgsInputs ++ localInputs ++ [ sphinxTools ];
+  # TODO figure out why this causes `Argument list too long` error
+  # inputsFrom = crossShells;
   # We don't currently use this, and it's a pain to materialize, and otherwise
   # costs a fair bit of eval time.
   withHoogle = false;

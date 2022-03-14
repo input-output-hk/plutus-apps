@@ -13,7 +13,7 @@ bug-reports:   https://github.com/iohk/plutus/issues
 description:
     Please see the README on GitHub at <https://github.com/input-output-hk/plutus#readme>
 
-build-type:    Simple
+build-type: Simple
 
 source-repository head
     type:     git
@@ -44,6 +44,7 @@ common lang
         -Wincomplete-record-updates -Wredundant-constraints -Widentities
         -fobject-code -fno-ignore-interface-pragmas
         -fno-omit-interface-pragmas
+        -Wno-unused-packages
 
     -- See Plutus Tx readme
     if flag(defer-plugin-errors)
@@ -196,6 +197,9 @@ library
         websockets -any,
         Win32-network -any,
         yaml -any,
+    if !os(ghcjs)
+        build-depends:
+                       lobemo-backend-ekg -any
 
 test-suite plutus-pab-test-light
     default-language: Haskell2010
@@ -235,3 +239,115 @@ test-suite plutus-pab-test-light
         tasty-quickcheck -any,
         stm -any,
         async -any,
+
+-- transaction processing library
+executable pab-mktx-lib
+    main-is: Main.hs
+    hs-source-dirs:
+        mktx
+    default-language: Haskell2010
+    default-extensions: ImportQualifiedPost
+    ghc-options: -Wall -Wnoncanonical-monad-instances
+                 -Wincomplete-uni-patterns -Wincomplete-record-updates
+                 -Wredundant-constraints -Widentities
+    build-depends:
+        base >= 4.9 && <5,
+        aeson -any,
+        bytestring -any,
+        cardano-crypto-class -any,
+        containers -any,
+        data-default -any,
+        flat -any,
+        freer-extras -any,
+        hedgehog -any,
+        prettyprinter -any,
+        QuickCheck -any,
+        tasty -any,
+        tasty-hunit -any,
+        tasty-golden -any,
+        tasty-quickcheck -any,
+        text -any,
+        lens -any,
+        mtl -any,
+        row-types -any,
+        freer-simple -any,
+        foldl -any,
+        streaming -any,
+        directory -any,
+        filepath -any,
+        serialise -any,
+        plutus-core -any,
+        plutus-ledger-api -any,
+        plutus-pab -any,
+        plutus-tx -any,
+        plutus-contract -any,
+        plutus-chain-index-core -any,
+        plutus-ledger -any,
+        plutus-ledger-constraints -any,
+        plutus-use-cases -any,
+        optparse-applicative -any,
+        aeson-pretty -any,
+        cardano-api -any,
+        cardano-binary -any,
+        cborg -any,
+        memory -any
+    if impl(ghcjs)
+        build-depends:
+            ghcjs-base -any
+
+    if !os(ghcjs)
+        buildable: False
+
+
+-- test JSON transaction processing, intended for JS library
+test-suite pab-mktx
+    type:             exitcode-stdio-1.0
+    main-is: Test.hs
+    hs-source-dirs:
+        mktx
+    default-language: Haskell2010
+    default-extensions: ImportQualifiedPost
+    ghc-options: -Wall -Wnoncanonical-monad-instances
+                 -Wincomplete-uni-patterns -Wincomplete-record-updates
+                 -Wredundant-constraints -Widentities
+    build-depends:
+        base >= 4.9 && <5,
+        aeson -any,
+        bytestring -any,
+        cardano-crypto-class -any,
+        containers -any,
+        data-default -any,
+        flat -any,
+        freer-extras -any,
+        hedgehog -any,
+        prettyprinter -any,
+        QuickCheck -any,
+        tasty -any,
+        tasty-hunit -any,
+        tasty-golden -any,
+        tasty-quickcheck -any,
+        text -any,
+        lens -any,
+        mtl -any,
+        row-types -any,
+        freer-simple -any,
+        foldl -any,
+        streaming -any,
+        directory -any,
+        filepath -any,
+        serialise -any,
+        plutus-core -any,
+        plutus-ledger-api -any,
+        plutus-pab -any,
+        plutus-tx -any,
+        plutus-contract -any,
+        plutus-chain-index-core -any,
+        plutus-ledger -any,
+        plutus-ledger-constraints -any,
+        plutus-use-cases -any,
+        optparse-applicative -any,
+        aeson-pretty -any,
+        cardano-api -any,
+        cardano-binary -any,
+        cborg -any,
+        memory -any
