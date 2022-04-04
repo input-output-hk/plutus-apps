@@ -132,6 +132,7 @@
             ];
           buildable = true;
           modules = [
+            "Test/PlutusExample/Conf"
             "Test/PlutusExample/Direct/ScriptContextEquality"
             "Test/PlutusExample/Direct/CertifyingAndWithdrawingPlutus"
             "Test/PlutusExample/Direct/ScriptContextEqualityMint"
