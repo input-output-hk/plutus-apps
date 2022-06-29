@@ -33,15 +33,14 @@ import Data.Semigroup.Generic (GenericSemigroupMonoid (..))
 import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Generics (Generic)
+import Ledger (Address (..), Script, ScriptHash, TxOutRef)
 import Ledger.Ada qualified as Ada
 import Ledger.Credential (Credential)
+import Ledger.Scripts (Datum, DatumHash, Redeemer, RedeemerHash)
 import Ledger.Tx (TxId)
-import Plutus.ChainIndex.Tx (ChainIndexTx, ChainIndexTxOut (..), citxData, citxRedeemers, citxScripts, citxTxId,
-                             txOutsWithRef)
+import Plutus.ChainIndex.Tx (ChainIndexTx (..), ChainIndexTxOut (ChainIndexTxOut, citoAddress, citoValue), citxData,
+                             citxRedeemers, citxScripts, citxTxId, txOutsWithRef)
 import Plutus.ChainIndex.Types (Diagnostics (..))
-import Plutus.V1.Ledger.Api (Address (Address, addressCredential), Datum, DatumHash, Redeemer, RedeemerHash, Script,
-                             TxOutRef)
-import Plutus.V1.Ledger.Scripts (ScriptHash)
 import Plutus.V1.Ledger.Value (AssetClass (AssetClass), flattenValue)
 
 -- | Set of transaction output references for each address.

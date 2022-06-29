@@ -31,9 +31,9 @@ import Data.Maybe (mapMaybe)
 import Data.Monoid (Ap (Ap))
 import Data.Traversable (for)
 import GHC.Generics (Generic)
-import Ledger (Block, Blockchain, CardanoTx (..), OnChainTx (..), Params (..), ScriptValidationEvent, Slot (..),
-               SomeCardanoApiTx (SomeTx), Tx (..), TxId, TxIn (txInRef), TxOut (txOutValue), Value, eitherTx,
-               getCardanoTxId, mergeCardanoTxWith, onCardanoTx)
+import Ledger (Block, Blockchain, CardanoTx (..), OnChainTx (..), Params, ScriptValidationEvent, Slot (..),
+               SomeCardanoApiTx (SomeTx), Tx (..), TxId, TxOut (txOutValue), Value, eitherTx, getCardanoTxId,
+               mergeCardanoTxWith, onCardanoTx, txInputRef)
 import Ledger.Index qualified as Index
 import Ledger.Interval qualified as Interval
 import Ledger.Validation qualified as Validation
@@ -179,7 +179,7 @@ validateBlock params slot@(Slot s) idx txns =
 
 getCollateral :: Index.UtxoIndex -> CardanoTx -> Value
 getCollateral idx = onCardanoTx
-    (\tx -> fromRight (txFee tx) $ alaf Ap foldMap (fmap txOutValue . (`Index.lookup` idx) . txInRef) (txCollateral tx))
+    (\tx -> fromRight (txFee tx) $ alaf Ap foldMap (fmap txOutValue . (`Index.lookup` idx) . txInputRef) (txCollateral tx))
     (\_ -> error "Wallet.Emulator.Chain.getCollateral: Expecting a mock tx, not an Alonzo tx")
 
 -- | Check whether the given transaction can be validated in the given slot.

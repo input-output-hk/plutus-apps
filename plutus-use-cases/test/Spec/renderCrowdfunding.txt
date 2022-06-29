@@ -800,9 +800,9 @@ Inputs:
   ---- Input 0 ----
   Destination:  Script: 8ff252c8c5423de7925e0c556871c90ed904ec3beb3dab519e9bfd9f
   Value:
-    Ada:      Lovelace:  2500000
+    Ada:      Lovelace:  10000000
   Source:
-    Tx:     31f38006481bbd0f6fa4ba7f2fb29856988990f264be0c35eee91dff98e879a4
+    Tx:     cb11f60209ec0a31a6f1fdbd2f30c24a23d8aec19c6647c57958eba563e6fcb6
     Output #0
     Script: 590b0c0100003323232323232323232323232323...
 
@@ -818,9 +818,9 @@ Inputs:
   ---- Input 2 ----
   Destination:  Script: 8ff252c8c5423de7925e0c556871c90ed904ec3beb3dab519e9bfd9f
   Value:
-    Ada:      Lovelace:  10000000
+    Ada:      Lovelace:  2500000
   Source:
-    Tx:     cb11f60209ec0a31a6f1fdbd2f30c24a23d8aec19c6647c57958eba563e6fcb6
+    Tx:     31f38006481bbd0f6fa4ba7f2fb29856988990f264be0c35eee91dff98e879a4
     Output #0
     Script: 590b0c0100003323232323232323232323232323...
 

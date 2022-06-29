@@ -18,15 +18,15 @@ import Ledger.Constraints (MkTxError)
 import Ledger.Crypto (PubKey, Signature)
 import Ledger.Interval (Extended, Interval, LowerBound, UpperBound)
 import Ledger.Slot (Slot)
-import Ledger.Tx (RedeemerPtr, ScriptTag, Tx, TxId)
+import Ledger.Tx (Certificate, RedeemerPtr, ScriptTag, Tx, TxId, TxIn, TxInType, TxInput, TxInputType, TxOut, TxOutRef,
+                  Withdrawal)
 import Ledger.Tx.CardanoAPI (ToCardanoError)
 import Ledger.Typed.Tx (ConnectionError, WrongOutTypeError)
 import Plutus.Contract.Effects (ActiveEndpoint (..), PABReq (..), PABResp (..))
 import Plutus.Contract.StateMachine (ThreadToken)
 import Plutus.Script.Utils.V1.Address (mkValidatorAddress)
-import Plutus.V1.Ledger.Api (Address (..), LedgerBytes, PubKeyHash, TxOut, TxOutRef, ValidatorHash (ValidatorHash))
+import Plutus.V1.Ledger.Api (Address (..), LedgerBytes, PubKeyHash, ValidatorHash (ValidatorHash))
 import Plutus.V1.Ledger.Bytes qualified as LedgerBytes
-import Plutus.V1.Ledger.Tx (TxIn, TxInType)
 import PlutusTx qualified
 import PlutusTx.AssocMap qualified as AssocMap
 import PlutusTx.Prelude qualified as PlutusTx
@@ -54,6 +54,16 @@ instance Arbitrary Ledger.MintingPolicy where
     arbitrary = pure acceptingMintingPolicy
 
 instance Arbitrary Ledger.MintingPolicyHash where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
+instance Arbitrary Ledger.Script where
+    arbitrary = oneof [
+          pure $ Ledger.unValidatorScript acceptingValidator
+        , pure $ Ledger.unMintingPolicyScript acceptingMintingPolicy
+        ]
+
+instance Arbitrary Ledger.ScriptHash where
     arbitrary = genericArbitrary
     shrink = genericShrink
 
@@ -93,6 +103,14 @@ instance Arbitrary TxIn where
     arbitrary = genericArbitrary
     shrink = genericShrink
 
+instance Arbitrary TxInputType where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
+instance Arbitrary TxInput where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
 instance Arbitrary TxOut where
     arbitrary = genericArbitrary
     shrink = genericShrink
@@ -102,6 +120,26 @@ instance Arbitrary TxOutRef where
     shrink = genericShrink
 
 instance Arbitrary TxInType where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
+instance Arbitrary Withdrawal where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
+instance Arbitrary Certificate where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
+instance Arbitrary Ledger.Credential where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
+instance Arbitrary Ledger.StakingCredential where
+    arbitrary = genericArbitrary
+    shrink = genericShrink
+
+instance Arbitrary Ledger.DCert where
     arbitrary = genericArbitrary
     shrink = genericShrink
 

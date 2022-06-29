@@ -70,6 +70,7 @@ library
                  -Wredundant-constraints -Widentities
                  -- See Plutus Tx readme
                  -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas
+
     build-depends:
         base -any,
         aeson -any,

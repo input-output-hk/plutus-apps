@@ -48,9 +48,8 @@ import Data.Text.Class (fromText, toText)
 import GHC.Generics (Generic)
 import Ledger (Address (addressCredential), CardanoTx, ChainIndexTxOut, Params (..),
                PaymentPrivateKey (PaymentPrivateKey, unPaymentPrivateKey),
-               PaymentPubKey (PaymentPubKey, unPaymentPubKey),
-               PaymentPubKeyHash (PaymentPubKeyHash, unPaymentPubKeyHash), SomeCardanoApiTx, StakePubKey,
-               Tx (txFee, txMint), UtxoIndex (..))
+               PaymentPubKeyHash (PaymentPubKeyHash, unPaymentPubKeyHash), PubKeyHash, SomeCardanoApiTx, StakePubKey,
+               Tx (txFee, txMint), TxInput (TxInput, txInputRef), TxOutRef, UtxoIndex (..), ValidatorHash, Value)
 import Ledger qualified
 import Ledger.Ada qualified as Ada
 import Ledger.CardanoWallet (MockWallet, WalletNumber)
@@ -68,8 +67,6 @@ import Plutus.ChainIndex.Emulator (ChainIndexEmulatorState, ChainIndexQueryEffec
 import Plutus.Contract (WalletAPIError)
 import Plutus.Contract.Checkpoint (CheckpointLogMsg)
 import Plutus.Contract.Wallet (finalize)
-import Plutus.V1.Ledger.Api (PubKeyHash, TxOutRef, ValidatorHash, Value)
-import Plutus.V1.Ledger.Tx (TxIn (TxIn, txInRef))
 import PlutusTx.Prelude qualified as PlutusTx
 import Prettyprinter (Pretty (pretty))
 import Servant.API (FromHttpApiData (parseUrlPiece), ToHttpApiData (toUrlPiece))
@@ -163,7 +160,7 @@ walletToMockWallet (Wallet _ wid) =
   find ((==) wid . WalletId . Cardano.Wallet.WalletId . CW.mwWalletId) CW.knownMockWallets
 
 -- | The public key of a mock wallet.  (Fails if the wallet is not a mock wallet).
-mockWalletPaymentPubKey :: Wallet -> PaymentPubKey
+mockWalletPaymentPubKey :: Wallet -> Ledger.PaymentPubKey
 mockWalletPaymentPubKey w =
     CW.paymentPubKey
         $ fromMaybe (error $ "Wallet.Emulator.Wallet.walletPubKey: Wallet "
@@ -176,7 +173,7 @@ mockWalletPaymentPubKeyHash :: Wallet -> PaymentPubKeyHash
 mockWalletPaymentPubKeyHash =
     PaymentPubKeyHash
   . Ledger.pubKeyHash
-  . unPaymentPubKey
+  . Ledger.unPaymentPubKey
   . mockWalletPaymentPubKey
 
 -- | Get the address of a mock wallet. (Fails if the wallet is not a mock wallet).
@@ -215,13 +212,13 @@ makeLenses ''WalletState
 ownPaymentPrivateKey :: WalletState -> PaymentPrivateKey
 ownPaymentPrivateKey = CW.paymentPrivateKey . _mockWallet
 
-ownPaymentPublicKey :: WalletState -> PaymentPubKey
+ownPaymentPublicKey :: WalletState -> Ledger.PaymentPubKey
 ownPaymentPublicKey = CW.paymentPubKey . _mockWallet
 
 -- | Get the user's own payment public-key address.
 ownAddress :: WalletState -> Address
 ownAddress = flip Ledger.pubKeyAddress Nothing
-           . PaymentPubKey
+           . Ledger.PaymentPubKey
            . Ledger.toPublicKey
            . unPaymentPrivateKey
            . ownPaymentPrivateKey
@@ -398,10 +395,10 @@ lookupValue ::
     ( Member (Error WAPI.WalletAPIError) effs
     , Member ChainIndexQueryEffect effs
     )
-    => Tx.TxIn
+    => Tx.TxInput
     -> Eff effs Value
-lookupValue outputRef@TxIn {txInRef} = do
-    txoutMaybe <- ChainIndex.unspentTxOutFromRef txInRef
+lookupValue outputRef@TxInput {txInputRef} = do
+    txoutMaybe <- ChainIndex.unspentTxOutFromRef txInputRef
     case txoutMaybe of
         Just txout -> pure $ view Ledger.ciTxOutValue txout
         Nothing ->
@@ -422,11 +419,11 @@ handleBalanceTx ::
 handleBalanceTx utxo UnbalancedTx{unBalancedTxTx} = do
     Params { pProtocolParams } <- WAPI.getClientParams
     let filteredUnbalancedTxTx = removeEmptyOutputs unBalancedTxTx
-    let txInputs = Set.toList $ Tx.txInputs filteredUnbalancedTxTx
+    let txInputs = Tx.txInputs filteredUnbalancedTxTx
     ownPaymentPubKey <- gets ownPaymentPublicKey
     let ownStakePubKey = Nothing
-    inputValues <- traverse lookupValue (Set.toList $ Tx.txInputs filteredUnbalancedTxTx)
-    collateral  <- traverse lookupValue (Set.toList $ Tx.txCollateral filteredUnbalancedTxTx)
+    inputValues <- traverse lookupValue (Tx.txInputs filteredUnbalancedTxTx)
+    collateral  <- traverse lookupValue (Tx.txCollateral filteredUnbalancedTxTx)
     let fees = txFee filteredUnbalancedTxTx
         left = txMint filteredUnbalancedTxTx <> fold inputValues
         right = fees <> foldMap (view Tx.outValue) (filteredUnbalancedTxTx ^. Tx.outputs)
@@ -450,7 +447,7 @@ handleBalanceTx utxo UnbalancedTx{unBalancedTxTx} = do
             else do
                 logDebug $ AddingInputsFor neg
                 -- filter out inputs from utxo that are already in unBalancedTx
-                let inputsOutRefs = map Tx.txInRef txInputs
+                let inputsOutRefs = map Tx.txInputRef txInputs
                     filteredUtxo = flip Map.filterWithKey utxo $ \txOutRef _ ->
                         txOutRef `notElem` inputsOutRefs
                 addInputs filteredUtxo ownPaymentPubKey ownStakePubKey neg tx'
@@ -490,7 +487,7 @@ splitOffAdaOnlyValue vl = if Value.isAdaOnlyValue vl || ada < Ledger.minAdaTxOut
     where
         ada = Ada.fromValue vl - Ledger.minAdaTxOut
 
-addOutput :: PaymentPubKey -> Maybe StakePubKey -> Value -> Tx -> Tx
+addOutput :: Ledger.PaymentPubKey -> Maybe StakePubKey -> Value -> Tx -> Tx
 addOutput pk sk vl tx = tx & over Tx.outputs (++ pkos) where
     pkos = (\v -> Tx.pubKeyTxOut v pk sk) <$> splitOffAdaOnlyValue vl
 
@@ -504,9 +501,10 @@ addCollateral
 addCollateral mp vl tx = do
     (spend, _) <- selectCoin (filter (Value.isAdaOnlyValue . snd) (second (view Ledger.ciTxOutValue) <$> Map.toList mp)) vl
     let addTxCollateral =
-            let ins = Set.fromList (Tx.pubKeyTxIn . fst <$> spend)
-            in over Tx.collateralInputs (Set.union ins)
-    pure $ tx & addTxCollateral
+            let ins = Set.fromList (Tx.pubKeyTxInput . fst <$> spend)
+            -- Is uniqueness needed here?
+            in over Tx.collateralInputs (Set.elems . Set.union ins . Set.fromList)
+    pure $ addTxCollateral tx
 
 -- | @addInputs mp pk vl tx@ selects transaction outputs worth at least
 --   @vl@ from the UTXO map @mp@ and adds them as inputs to @tx@. A public
@@ -515,7 +513,7 @@ addInputs
     :: ( Member (Error WAPI.WalletAPIError) effs
        )
     => Map.Map TxOutRef ChainIndexTxOut -- ^ The current wallet's unspent transaction outputs.
-    -> PaymentPubKey
+    -> Ledger.PaymentPubKey
     -> Maybe StakePubKey
     -> Value
     -> Tx
@@ -525,8 +523,9 @@ addInputs mp pk sk vl tx = do
     let
 
         addTxIns =
-            let ins = Set.fromList (Tx.pubKeyTxIn . fst <$> spend)
-            in over Tx.inputs (Set.union ins)
+            let ins = Set.fromList (Tx.pubKeyTxInput . fst <$> spend)
+            -- Is uniqueness needed here?
+            in over Tx.inputs (Set.elems . Set.union ins . Set.fromList)
 
         addTxOut =
             if Value.isZero change

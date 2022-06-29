@@ -39,7 +39,7 @@ module Ledger.Validation(
   currentBlock,
   previousBlocks,
   -- * Etc.
-  emulatorGlobals
+  emulatorGlobals,
   ) where
 
 import Cardano.Api.Shelley (ShelleyBasedEra (ShelleyBasedEraAlonzo), makeSignedTransaction, shelleyGenesisDefaults,
@@ -49,7 +49,7 @@ import Cardano.Crypto.Wallet qualified as Crypto
 import Cardano.Ledger.Alonzo (TxBody, TxOut)
 import Cardano.Ledger.Alonzo.PParams (PParams' (..), retractPP)
 import Cardano.Ledger.Alonzo.PlutusScriptApi (collectTwoPhaseScriptInputs, evalScripts)
-import Cardano.Ledger.Alonzo.Rules.Utxos
+import Cardano.Ledger.Alonzo.Rules.Utxos (UtxosPredicateFailure (CollectErrors))
 import Cardano.Ledger.Alonzo.Scripts (CostModels, ExUnits (ExUnits), Script, unCostModels)
 import Cardano.Ledger.Alonzo.Tools qualified as C.Ledger
 import Cardano.Ledger.Alonzo.Tx (IsValid (..), ValidatedTx (..))

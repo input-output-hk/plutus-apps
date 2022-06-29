@@ -13,28 +13,6 @@
 
 module Ledger.Tx
     ( module Export
-    -- * ChainIndexTxOut
-    , ChainIndexTxOut(..)
-    , toTxOut
-    , fromTxOut
-    -- ** Lenses and Prisms
-    , ciTxOutAddress
-    , ciTxOutValue
-    , ciTxOutDatum
-    , ciTxOutValidator
-    , _PublicKeyChainIndexTxOut
-    , _ScriptChainIndexTxOut
-    , CardanoTx(..)
-    , onCardanoTx
-    , mergeCardanoTxWith
-    , cardanoTxMap
-    , getCardanoTxId
-    , getCardanoTxInputs
-    , getCardanoTxOutRefs
-    , getCardanoTxUnspentOutputsTx
-    , getCardanoTxFee
-    , SomeCardanoApiTx(..)
-    , ToCardanoError(..)
     -- * Transactions
     , addSignature
     , addSignature'
@@ -44,6 +22,30 @@ module Ledger.Tx
     , unspentOutputsTx
     -- * Hashing transactions
     , txId
+    -- * ChainIndexTxOut
+    , ChainIndexTxOut(..)
+    , TxOutTx (..)
+    , txOutTxDatum
+    , toTxOut
+    , fromTxOut
+    -- ** Lenses and Prisms
+    , ciTxOutAddress
+    , ciTxOutValue
+    , ciTxOutDatum
+    , ciTxOutValidator
+    , _PublicKeyChainIndexTxOut
+    , _ScriptChainIndexTxOut
+    -- * CardanoTx
+    , CardanoTx(..)
+    , SomeCardanoApiTx(..)
+    , onCardanoTx
+    , mergeCardanoTxWith
+    , cardanoTxMap
+    , getCardanoTxId
+    , getCardanoTxInputs
+    , getCardanoTxOutRefs
+    , getCardanoTxUnspentOutputsTx
+    , getCardanoTxFee
     ) where
 
 import Cardano.Api qualified as C
@@ -51,28 +53,36 @@ import Cardano.Crypto.Hash (SHA256, digest)
 import Cardano.Crypto.Wallet qualified as Crypto
 import Codec.CBOR.Write qualified as Write
 import Codec.Serialise (Serialise (encode))
-import Control.Lens (At (at), makeLenses, makePrisms, (&), (?~))
+import Control.Lens (at, makeLenses, makePrisms, (&), (?~))
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Maybe (isJust)
 import Data.OpenApi qualified as OpenApi
 import Data.Proxy (Proxy (Proxy))
-import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Generics (Generic)
 import Ledger.Address (Address, PaymentPubKey, StakePubKey, pubKeyAddress)
 import Ledger.Crypto (Passphrase, signTx, signTx', toPublicKey)
 import Ledger.Orphans ()
-import Ledger.Tx.CardanoAPI (SomeCardanoApiTx (SomeTx), ToCardanoError (..))
+import Ledger.Tx.CardanoAPI (SomeCardanoApiTx (SomeTx))
 import Ledger.Tx.CardanoAPI qualified as CardanoAPI
 import Ledger.Tx.Internal as Export
+import Ledger.Tx.Types as Export
 import Plutus.Script.Utils.V1.Scripts (datumHash)
 import Plutus.V1.Ledger.Api (Credential (PubKeyCredential, ScriptCredential), Datum, DatumHash, Validator,
                              ValidatorHash, Value, addressCredential, toBuiltin)
 import Plutus.V1.Ledger.Tx as Export
 import Prettyprinter (Pretty (pretty), braces, colon, hang, nest, viaShow, vsep, (<+>))
 
-type PrivateKey = Crypto.XPrv
+-- | A 'TxOut' along with the 'Tx' it comes from, which may have additional information e.g.
+-- the full data script that goes with the 'TxOut'.
+data TxOutTx = TxOutTx { txOutTxTx :: Tx, txOutTxOut :: TxOut }
+    deriving stock (Show, Eq, Generic)
+    deriving anyclass (Serialise, ToJSON, FromJSON)
+
+txOutTxDatum :: TxOutTx -> Maybe Datum
+txOutTxDatum (TxOutTx tx out) = txOutDatum out >>= (`Map.lookup` txData tx)
 
 -- | Transaction output that comes from a chain index query.
 --
@@ -125,7 +135,6 @@ instance Pretty ChainIndexTxOut where
     pretty ScriptChainIndexTxOut {_ciTxOutAddress, _ciTxOutValue} =
                 hang 2 $ vsep ["-" <+> pretty _ciTxOutValue <+> "addressed to", pretty _ciTxOutAddress]
 
-
 {- Note [Why we have the Both constructor in CardanoTx]
 
 We want to do validation with both the emulator and with the cardano-ledger library, at least as long
@@ -165,10 +174,10 @@ getCardanoTxId = onCardanoTx txId getCardanoApiTxId
 getCardanoApiTxId :: SomeCardanoApiTx -> TxId
 getCardanoApiTxId (SomeTx (C.Tx body _) _) = CardanoAPI.fromCardanoTxId $ C.getTxId body
 
-getCardanoTxInputs :: CardanoTx -> Set TxIn
-getCardanoTxInputs = onCardanoTx txInputs
+getCardanoTxInputs :: CardanoTx -> [TxIn]
+getCardanoTxInputs = onCardanoTx (\tx -> map (fillTxInputWitnesses tx) $ txInputs tx)
     (\(SomeTx (C.Tx (C.TxBody C.TxBodyContent {..}) _) _) ->
-        Set.fromList $ fmap ((`TxIn` Nothing) . CardanoAPI.fromCardanoTxIn . fst) txIns)
+        fmap ((`TxIn` Nothing) . CardanoAPI.fromCardanoTxIn . fst) txIns)
 
 getCardanoTxOutRefs :: CardanoTx -> [(TxOut, TxOutRef)]
 getCardanoTxOutRefs = onCardanoTx txOutRefs CardanoAPI.txOutRefs
@@ -179,21 +188,46 @@ getCardanoTxUnspentOutputsTx = onCardanoTx unspentOutputsTx CardanoAPI.unspentOu
 getCardanoTxFee :: CardanoTx -> Value
 getCardanoTxFee = onCardanoTx txFee (\_ -> error "Ledger.Tx.getCardanoTxFee: Expecting a mock tx, not an Alonzo tx")
 
+-- Defined here as uses `txId`.
 instance Pretty Tx where
-    pretty t@Tx{txInputs, txCollateral, txOutputs, txMint, txFee, txValidRange, txSignatures, txMintScripts, txData} =
+    pretty t@(Tx _txInputs _txCollateral _txOutputs _txMint _txFee
+                 _txValidRange _txMintingScripts _txWithdrawals _txCertificates
+                 _txSignatures _txScripts _txData _txMetadata) =
         let lines' =
-                [ hang 2 (vsep ("inputs:" : fmap pretty (Set.toList txInputs)))
-                , hang 2 (vsep ("collateral inputs:" : fmap pretty (Set.toList txCollateral)))
-                , hang 2 (vsep ("outputs:" : fmap pretty txOutputs))
-                , "mint:" <+> pretty txMint
-                , "fee:" <+> pretty txFee
-                , hang 2 (vsep ("mps:": fmap pretty (Set.toList txMintScripts)))
-                , hang 2 (vsep ("signatures:": fmap (pretty . fst) (Map.toList txSignatures)))
-                , "validity range:" <+> viaShow txValidRange
-                , hang 2 (vsep ("data:": fmap (pretty . snd) (Map.toList txData) ))
+                [ hang 2 (vsep ("inputs:" : fmap pretty _txInputs))
+                , hang 2 (vsep ("collateral inputs:" : fmap pretty _txCollateral))
+                , hang 2 (vsep ("outputs:" : fmap pretty _txOutputs))
+                , "mint:" <+> pretty _txMint
+                , "fee:" <+> pretty _txFee
+                , hang 2 (vsep ("mps:": fmap pretty (Map.assocs _txMintingScripts)))
+                , hang 2 (vsep ("signatures:": fmap (pretty . fst) (Map.toList _txSignatures)))
+                , "validity range:" <+> viaShow _txValidRange
+                , hang 2 (vsep ("data:": fmap (pretty . snd) (Map.toList _txData)))
+                , hang 2 (vsep ("attached scripts:": fmap pretty (Map.keys _txScripts)))
+                , hang 2 (vsep ("withdrawals:": fmap pretty _txWithdrawals))
+                , hang 2 (vsep ("certificates:": fmap pretty _txCertificates))
+                , "metadata:" <+> if isJust _txMetadata then "present" else mempty
                 ]
             txid = txId t
         in nest 2 $ vsep ["Tx" <+> pretty txid <> colon, braces (vsep lines')]
+
+-- THIS IS MAYBE DEPRECATED
+-- | A transaction without witnesses for its inputs. Used for `txId`.
+data TxStripped = TxStripped {
+    txStrippedInputs  :: Set.Set TxOutRef,
+    -- ^ The inputs to this transaction, as transaction output references only.
+    txStrippedOutputs :: [TxOut],
+    -- ^ The outputs of this transation.
+    txStrippedMint    :: !Value,
+    -- ^ The 'Value' minted by this transaction.
+    txStrippedFee     :: !Value
+    -- ^ The fee for this transaction.
+    } deriving (Show, Eq, Generic, Serialise)
+
+-- THIS IS MAYBE DEPRECATED
+strip :: Tx -> TxStripped
+strip Tx{..} = TxStripped (Set.fromList i) txOutputs txMint txFee where
+    i = map txInputRef txInputs
 
 -- | Compute the id of a transaction.
 txId :: Tx -> TxId
@@ -206,7 +240,7 @@ txId tx = TxId $ toBuiltin
 -- | Update a map of unspent transaction outputs and signatures based on the inputs
 --   and outputs of a transaction.
 updateUtxo :: Tx -> Map TxOutRef TxOut -> Map TxOutRef TxOut
-updateUtxo tx unspent = (unspent `Map.withoutKeys` spentOutputs tx) `Map.union` unspentOutputsTx tx
+updateUtxo tx unspent = (unspent `Map.withoutKeys` Set.fromList (spentOutputs tx)) `Map.union` unspentOutputsTx tx
 
 -- | A list of a transaction's outputs paired with a 'TxOutRef's referring to them.
 txOutRefs :: Tx -> [(TxOut, TxOutRef)]
@@ -221,6 +255,8 @@ unspentOutputsTx t = Map.fromList $ fmap f $ zip [0..] $ txOutputs t where
 -- | Create a transaction output locked by a public payment key and optionnaly a public stake key.
 pubKeyTxOut :: Value -> PaymentPubKey -> Maybe StakePubKey -> TxOut
 pubKeyTxOut v pk sk = TxOut (pubKeyAddress pk sk) v Nothing
+
+type PrivateKey = Crypto.XPrv
 
 -- | Sign the transaction with a 'PrivateKey' and passphrase (ByteString) and add the signature to the
 --   transaction's list of signatures.
