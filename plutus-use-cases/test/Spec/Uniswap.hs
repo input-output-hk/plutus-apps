@@ -10,6 +10,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing -fno-warn-redundant-constraints #-}
 module Spec.Uniswap where
 
@@ -144,7 +145,7 @@ setupTokens = do
     ownPK <- Contract.ownFirstPaymentPubKeyHash
     cur   <- Currency.mintContract ownPK [(fromString tn, fromIntegral (length wallets) * amount) | tn <- tokenNames]
     let cs = Currency.currencySymbol cur
-        v  = mconcat [Value.singleton cs (fromString tn) amount | tn <- tokenNames]
+        v  = Ada.adaValueOf 4 <> mconcat [Value.singleton cs (fromString tn) amount | tn <- tokenNames]
 
     forM_ wallets $ \w -> do
         let pkh = mockWalletPaymentPubKeyHash w
@@ -211,11 +212,11 @@ instance ContractModel UniswapModel where
                 [ (3, createPool) | not . null $ s ^. contractState . exchangeableTokens ] ++
                 [ (10, gen) | gen <- [add True, swap True, remove True, close]
                            , not . null $ s ^. contractState . exchangeableTokens
-                           , not . null $ s ^. contractState . pools ] ++
+                           , not . null $ s ^. contractState . pools ] {-++
                 [ (1, bad) | bad <- [add False, swap False, remove False]
                            , not . null $ s ^. contractState . exchangeableTokens ] ++
                 [ (1, generalRemove) | not . null $ s ^. contractState . exchangeableTokens
-                                     , not . null $ s ^. contractState . pools ]
+                                     , not . null $ s ^. contractState . pools ]-}
     where
       createPool = do
         w <- elements $ wallets \\ [w1]
@@ -288,7 +289,7 @@ instance ContractModel UniswapModel where
                    , start <- [StartContract . WalletKey, StartContract . BadReqKey] ]
 
   precondition s Start                        = not $ hasUniswapToken s
-  precondition _ SetupTokens                  = True
+  precondition s SetupTokens                  = null (s ^. contractState . exchangeableTokens)
   precondition s (CreatePool _ t1 a1 t2 a2)   = hasUniswapToken s
                                                 && not (hasOpenPool s t1 t2)
                                                 && t1 /= t2
@@ -326,8 +327,8 @@ instance ContractModel UniswapModel where
     SetupTokens -> do
       -- Give 1000000 A, B, C, and D token to w1, w2, w3, w4
       -- The tokens will be given to each wallet in a UTxO that needs
-      -- to have minAdaTxOut
-      withdraw w1 $ Ada.toValue ((fromInteger . toInteger . length $ wallets) * Ledger.minAdaTxOut)
+      -- to have 2 ada each
+      withdraw w1 $ Ada.adaValueOf ((fromInteger . toInteger . length $ wallets) * 4)
       -- Create the tokens
       ts <- forM tokenNames $ \t -> do
         tok <- createToken t
@@ -335,10 +336,10 @@ instance ContractModel UniswapModel where
         return tok
       -- Give the tokens to the wallets
       forM_ wallets $ \ w -> do
-        deposit w $ Ada.toValue Ledger.minAdaTxOut
+        deposit w (Ada.adaValueOf 4)
         deposit w $ mconcat [ symAssetClassValue t 1000000 | t <- ts ]
       exchangeableTokens %= (Set.fromList ts <>)
-      wait 21
+      wait 41
 
     Start -> do
       -- Create the uniswap token
@@ -631,10 +632,16 @@ tests = testGroup "uniswap" [
                        "setupTokens contract should be still running"
         .&&. assertNoFailedTransactions)
         Uniswap.uniswapTrace
-    -- TODO: turned off until there is an option to turn off cardano-ledger validation
-    -- , testProperty "prop_Uniswap" $ withMaxSuccess 20 prop_Uniswap
+    , testProperty "prop_Uniswap" $ withMaxSuccess 20 prop_Uniswap
     , testProperty "prop_UniswapAssertions" $ withMaxSuccess 1000 (propSanityCheckAssertions @UniswapModel)
     , testProperty "prop_NLFP" $ withMaxSuccess 250 prop_CheckNoLockedFundsProofFast
+    , testProperty "newTest"
+        $ withMaxSuccess 1
+        $ forAllDL newTest
+        $ propRunActionsWithOptions
+              (defaultCheckOptionsContractModel & allowBigTransactions)
+              defaultCoverageOptions
+              (\ _ -> pure True)
     ]
 
 runTestsWithCoverage :: IO ()
@@ -655,6 +662,18 @@ runTestsWithCoverage = do
                             .&&. assertNoFailedTransactions)
                             Uniswap.uniswapTrace
                           ]
+
+newTest :: DL UniswapModel ()
+newTest = do
+  action Start
+  action SetupTokens
+  UniswapModel {_exchangeableTokens = toList -> [a,b,c,d]} <- getContractState
+  action $ CreatePool w6 a 1 b 1
+  action $ CreatePool w3 c 1 d 1
+  action $ CreatePool w6 c 1 b 1
+  action $ AddLiquidity w6 d 0 c 3
+  action $ AddLiquidity w6 a 0 b 3
+
 
 -- | Certification.
 certification :: Certification UniswapModel
