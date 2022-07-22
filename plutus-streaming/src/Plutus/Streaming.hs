@@ -8,7 +8,7 @@ where
 import Cardano.Api (BlockInMode, CardanoMode, ChainPoint, ChainSyncClient (ChainSyncClient), ChainTip,
                     ConsensusModeParams (CardanoModeParams), EpochSlots (EpochSlots),
                     LocalChainSyncClient (LocalChainSyncClient),
-                    LocalNodeClientProtocols (LocalNodeClientProtocols, localChainSyncClient, localStateQueryClient, localTxSubmissionClient),
+                    LocalNodeClientProtocols (LocalNodeClientProtocols, localChainSyncClient, localStateQueryClient, localTxMonitoringClient, localTxSubmissionClient),
                     LocalNodeConnectInfo (LocalNodeConnectInfo, localConsensusModeParams, localNodeNetworkId, localNodeSocketPath),
                     NetworkId, connectToLocalNode)
 import Cardano.Api.ChainSync.Client (ClientStIdle (SendMsgFindIntersect, SendMsgRequestNext),
@@ -70,7 +70,8 @@ withChainSyncEventStream socketPath networkId point consumer = do
         LocalNodeClientProtocols
           { localChainSyncClient = LocalChainSyncClient client,
             localTxSubmissionClient = Nothing,
-            localStateQueryClient = Nothing
+            localStateQueryClient = Nothing,
+            localTxMonitoringClient = Nothing
           }
 
       connectInfo =
